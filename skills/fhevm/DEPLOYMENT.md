@@ -329,7 +329,47 @@ Fix with `vercel.json` committed alongside the frontend:
 
 Set **Root Directory** to `frontend/` in the Vercel project settings when deploying a subdirectory.
 
-### §8.2 — Cloudflare + Vercel: disable proxy on CNAME
+### §8.2 — GitHub Pages (static export via GitHub Actions)
+
+Three friction points that all hit in the same CI run and are easy to miss locally.
+
+**1. MetaMask SDK webpack alias.**
+MetaMask SDK transitively requires `@react-native-async-storage/async-storage`, which doesn't exist in a browser build. `next build` crashes with `Module not found`. Fix in `next.config.ts`:
+```typescript
+webpack: (config) => {
+  config.resolve.alias["@react-native-async-storage/async-storage"] = false;
+  return config;
+},
+```
+
+**2. Gitignored `.local.ts` contract stubs.**
+Scaffold-ETH generates `*.local.ts` contract files for the local chain (chainId 31337). These are gitignored. CI doesn't have them, so `next build` fails on import. Generate empty stubs before the build step:
+```yaml
+- name: Create missing local contract stubs
+  working-directory: packages/nextjs/contracts
+  run: |
+    for f in *.ts; do
+      stub="${f%.ts}.local.ts"
+      name="${f%.ts}"
+      [ ! -f "$stub" ] && echo "export const $name = {} as const;" > "$stub"
+    done
+```
+
+**3. Optional API keys must not hard-throw.**
+If `scaffold.config.ts` (or any config file) throws when an API key env var is absent, the build crashes in CI environments that don't have the secret. Replace hard throws with graceful fallbacks:
+```typescript
+// ✗ Crashes CI if secret isn't set
+if (!process.env.NEXT_PUBLIC_ALCHEMY_API_KEY) throw new Error("key required");
+
+// ✓ Falls back to public RPC; set the secret for a dedicated endpoint
+const rpc = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+  ? `https://eth-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`
+  : "https://ethereum-sepolia-rpc.publicnode.com";
+```
+
+Required GitHub Actions secrets for a full deployment: `NEXT_PUBLIC_ALCHEMY_API_KEY` (optional, falls back to public RPC), `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`.
+
+### §8.4 — Cloudflare + Vercel: disable proxy on CNAME
 
 When pointing a Cloudflare-managed domain to Vercel via CNAME, the Cloudflare proxy (orange cloud) causes SSL certificate conflicts. Vercel cannot provision its certificate while Cloudflare terminates TLS first.
 

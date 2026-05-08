@@ -43,6 +43,12 @@ module.exports = {
   webpack: (config) => {
     config.experiments = { ...config.experiments, asyncWebAssembly: true, layers: true };
     config.module.rules.push({ test: /\.wasm$/, type: "asset/resource" });
+
+    // MetaMask SDK pulls in @react-native-async-storage/async-storage which
+    // doesn't exist in a browser build. Alias it to false to prevent a hard
+    // webpack resolution error.
+    config.resolve.alias["@react-native-async-storage/async-storage"] = false;
+
     return config;
   },
   // SDK initializes only on the client
@@ -51,6 +57,8 @@ module.exports = {
 ```
 
 Wrap SDK init in a `useEffect` and a `typeof window !== "undefined"` guard. Server-rendering `createInstance(SepoliaConfig)` will throw.
+
+**MetaMask SDK / React Native dep:** If you add `@metamask/sdk` to a Next.js project, it transitively requires `@react-native-async-storage/async-storage`. That package doesn't exist in a browser build, and webpack hard-crashes at compile time. The alias to `false` above suppresses it. Without it, `next build` fails with `Module not found: Can't resolve '@react-native-async-storage/async-storage'`.
 
 ### §1.3 — esbuild (no-framework static HTML)
 

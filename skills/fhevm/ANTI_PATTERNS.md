@@ -33,6 +33,9 @@ Skim before code review or audit. If a contract triggers any of these, fix befor
 | 21 | Upgradeable impl without `_disableInitializers` | **ACL bound to wrong addr** |
 | 22 | Boolean mapping for double-claim when handle check suffices | **unnecessary state** |
 | 23 | N-party sum validation done without state-machine replay guard | **re-enterable finalization** |
+| 24 | MetaMask SDK pulls `@react-native-async-storage` into Next.js | **build crash** |
+| 25 | Scaffold config hard-throws on missing API key | **CI build fails** |
+| 26 | Gitignored `.local.ts` stubs absent in CI | **CI build fails** |
 
 ---
 
@@ -575,6 +578,79 @@ KMS response time on Sepolia: 3–15 seconds empirically. Show a live elapsed co
 
 ---
 
+## §24 — MetaMask SDK pulls `@react-native-async-storage` into Next.js
+
+**Problem.** Adding `@metamask/sdk` to a Next.js project causes `next build` to hard-crash:
+```
+Module not found: Can't resolve '@react-native-async-storage/async-storage'
+```
+
+**Why it breaks.** MetaMask SDK lists `@react-native-async-storage/async-storage` as a transitive dependency. Webpack in a browser build tries to resolve it and fails because the package doesn't exist in a web environment.
+
+**Fix.** Alias the package to `false` in `next.config.ts` / `next.config.js`:
+```typescript
+webpack: (config) => {
+  config.resolve.alias["@react-native-async-storage/async-storage"] = false;
+  return config;
+},
+```
+
+This tells webpack to skip the module entirely. MetaMask SDK gracefully falls back to in-memory storage in browser contexts.
+
+---
+
+## §25 — Scaffold config hard-throws on missing API key
+
+**Problem.** A build helper (e.g., `scaffold.config.ts`) contains something like:
+```typescript
+if (!process.env.NEXT_PUBLIC_ALCHEMY_API_KEY) {
+  throw new Error("NEXT_PUBLIC_ALCHEMY_API_KEY is required");
+}
+```
+
+**Why it breaks.** `next build` evaluates this at build time. In CI environments (GitHub Actions, Vercel previews) where the secret hasn't been set, the entire build crashes — even if the key is optional at runtime (public RPC fallback exists).
+
+**Fix.** Make the key optional with a fallback rather than a hard throw:
+```typescript
+// ✓ Falls back to public RPC; set the secret to use a dedicated endpoint
+const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
+const rpc = alchemyKey
+  ? `https://eth-sepolia.g.alchemy.com/v2/${alchemyKey}`
+  : "https://ethereum-sepolia-rpc.publicnode.com";
+```
+
+For genuinely required keys (e.g., mainnet relayer API key), gate the throw behind a runtime check rather than a build-time check. Never let a missing *optional* key kill the build.
+
+---
+
+## §26 — Gitignored `.local.ts` contract stubs absent in CI
+
+**Problem.** Scaffold-ETH / similar templates generate `deployedContracts.local.ts` for the local dev chain (chainId 31337). This file is gitignored. A sibling file imports it:
+```typescript
+import localContracts from "./deployedContracts.local";
+```
+In CI there is no local chain, no generated file, and `next build` crashes with `Module not found`.
+
+**Why it breaks.** The `.local.ts` file is intentionally gitignored — it changes every time you restart a local node. But CI clones the repo without it, so the import is unresolvable.
+
+**Fix (option A — CI step).** Generate empty stubs in the GitHub Actions workflow before the build runs:
+```yaml
+- name: Create missing local contract stubs
+  working-directory: packages/nextjs/contracts
+  run: |
+    for f in *.ts; do
+      stub="${f%.ts}.local.ts"
+      name="${f%.ts}"
+      [ ! -f "$stub" ] && echo "export const $name = {} as const;" > "$stub"
+    done
+```
+
+**Fix (option B — postinstall script).** Add a `postinstall` script in `package.json` that generates the stubs. This ensures they exist both locally (without a running node) and in CI after `npm install`.
+
+Option A is simpler and self-contained. Option B is cleaner for monorepos — the stubs are always present regardless of who runs the build.
+
+---
+
 ## REVERT TABLE — what does this error mean?
 
 | Symptom | Likely cause | Section |
@@ -606,3 +682,9 @@ KMS response time on Sepolia: 3–15 seconds empirically. Show a live elapsed co
 | `userDecrypt` throws type error with ethers v6 | Strip `EIP712Domain` from `eip712.types` before `signTypedData`. See `FRONTEND.md` §5.1. |
 | Claim function reverts on second call despite correct logic | Replace boolean `claimed` mapping with `FHE.isInitialized` check. See §22. |
 | `confirmValidation` can be called again after ACTIVE | Gate both `markSumDecryptable` and `confirmValidation` on `PENDING` state. See §23. |
+| `Module not found: @react-native-async-storage` during `next build` | MetaMask SDK transitive dep. Alias to `false` in webpack config. See §24. |
+| Build crashes in CI on missing env var that worked locally | Config hard-throws on optional key. Use fallback instead. See §25. |
+| `Module not found: deployedContracts.local` in CI | `.local.ts` stubs are gitignored. Generate them as a CI step. See §26. |
+| `next build` fails with `Module not found: @react-native-async-storage` | Alias `@react-native-async-storage/async-storage` to `false` in `next.config.ts`. See §24. |
+| CI build crashes on missing `NEXT_PUBLIC_ALCHEMY_API_KEY` | Replace hard throw with a public-RPC fallback in `scaffold.config.ts`. See §25. |
+| CI build fails with `Module not found: ./deployedContracts.local` | Generate empty `.local.ts` stubs in the CI workflow before `next build`. See §26. |

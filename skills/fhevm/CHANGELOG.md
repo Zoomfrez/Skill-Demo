@@ -2,7 +2,7 @@
 
 Version assumptions, pinning, and known breaking changes. **Verify against current Zama docs before relying on specifics.**
 
-Last updated: 2026-04-30
+Last updated: 2026-05-08
 Source baseline: Hardhat 2.22 + Node.js v24 + GitHub Codespaces, FHEVM v0.9.
 
 > ⚠ All version numbers below were correct at the source date. Newer SDK releases may have shifted compatibility. Confirm at https://docs.zama.ai before pinning a new project.
@@ -262,7 +262,31 @@ Required as Codespaces Secrets:
 
 ---
 
-## §10 — Foundry support
+## §10 — Scaffold-ETH / Next.js specific issues
+
+These were encountered building and deploying a confidential salary registry on the Scaffold-ETH + Next.js stack. All three hit during CI/GitHub Pages deployment and pass silently in local dev.
+
+### MetaMask SDK → `@react-native-async-storage` webpack crash
+
+`@metamask/sdk` transitively requires `@react-native-async-storage/async-storage`. In a Next.js browser build, webpack tries to resolve this package, fails, and crashes with `Module not found`. Fix by aliasing to `false` in `next.config.ts`:
+
+```typescript
+config.resolve.alias["@react-native-async-storage/async-storage"] = false;
+```
+
+### Gitignored `.local.ts` contract stubs break CI builds
+
+Scaffold-ETH generates `deployedContracts.local.ts` (and similar `*.local.ts` files) for the local chain. These are gitignored. A sibling file imports them statically. In CI (GitHub Actions), the repo is cloned without these files and `next build` fails.
+
+**Fix:** Generate empty stubs as a CI step before the build (see `DEPLOYMENT.md` §8.2). Alternatively, add a `postinstall` script in `package.json` that creates them.
+
+### `scaffold.config.ts` hard-throw on optional API key
+
+The Scaffold-ETH template `scaffold.config.ts` may throw if `NEXT_PUBLIC_ALCHEMY_API_KEY` is not set. This crashes CI builds that don't have the secret. Replace with a public-RPC fallback (see `ANTI_PATTERNS.md` §25 and `DEPLOYMENT.md` §8.2).
+
+---
+
+## §11 — Foundry support
 
 Foundry support is partial as of FHEVM v0.9. The `@fhevm/hardhat-plugin` mock environment is not available — you must deploy mock FHE contracts manually via `vm.etch` or `foundry.toml` preloads, and inherit `ZamaFoundryConfig` instead of `ZamaEthereumConfig` in tests.
 
@@ -283,7 +307,7 @@ contract PayrollTest is Test, ZamaFoundryConfig {
 
 ---
 
-## §11 — Mainnet vs Sepolia config differences
+## §12 — Mainnet vs Sepolia config differences
 
 Tracked here because addresses change across SDK releases. **MUST** pull from the SDK's `SepoliaConfig` / `MainnetConfig` exports — never hardcode.
 
@@ -302,7 +326,7 @@ Behavior differences:
 
 ---
 
-## §12 — Stale / needs-verification list
+## §13 — Stale / needs-verification list
 
 Items below are likely correct but should be re-checked before any mainnet work:
 
@@ -315,7 +339,7 @@ Items below are likely correct but should be re-checked before any mainnet work:
 
 ---
 
-## §13 — Deprecated patterns
+## §14 — Deprecated patterns
 
 | Pattern | Status | Replacement |
 |---|---|---|
@@ -328,7 +352,7 @@ Items below are likely correct but should be re-checked before any mainnet work:
 
 ---
 
-## §14 — Update protocol
+## §15 — Update protocol
 
 When you pull a newer SDK or plugin:
 
