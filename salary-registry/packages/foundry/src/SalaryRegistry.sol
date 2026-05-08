@@ -19,6 +19,7 @@ contract SalaryRegistry is ZamaEthereumConfig {
 
     event RoleGranted(address indexed account, Role role);
     event SalarySet(address indexed employee, bytes32 handle);
+    event Registered(address indexed account);
 
     modifier onlyRole(Role r) {
         require(uint8(roles[msg.sender]) >= uint8(r), "SalaryRegistry: insufficient role");
@@ -28,6 +29,16 @@ contract SalaryRegistry is ZamaEthereumConfig {
     constructor(address admin) {
         roles[admin] = Role.Admin;
         emit RoleGranted(admin, Role.Admin);
+    }
+
+    /// @notice Anyone can self-register as an Employee.
+    /// @dev Harmless — employees can only read their own salary once a manager sets it.
+    ///      Cannot be used to escalate above Employee.
+    function register() external {
+        require(roles[msg.sender] == Role.None, "SalaryRegistry: already registered");
+        roles[msg.sender] = Role.Employee;
+        emit Registered(msg.sender);
+        emit RoleGranted(msg.sender, Role.Employee);
     }
 
     function setRole(address account, Role role) external onlyRole(Role.Admin) {

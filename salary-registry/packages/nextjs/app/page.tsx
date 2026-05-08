@@ -222,13 +222,20 @@ export default function Home() {
       {registry.myRole >= Role.Manager && <ManagerPanel registry={registry} />}
       {registry.myRole >= Role.Admin && <AdminPanel registry={registry} />}
 
-      {/* Catch-all for Role.None */}
+      {/* Self-registration for Role.None */}
       {registry.myRole === Role.None && (
         <div className={card}>
-          <p className="text-sm text-gray-500">
-            Your address has no role on this contract. Ask the admin to assign you one.
+          <h3 className={title}>Join the Registry</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Register as an Employee to receive a confidential salary. Only you will be able to decrypt it.
           </p>
-          <p className="text-xs text-gray-400 mt-2 font-mono break-all">Admin address set at deployment.</p>
+          <button
+            className={primary}
+            disabled={registry.isProcessing}
+            onClick={registry.registerAsEmployee}
+          >
+            {registry.isProcessing ? "Registering..." : "Register as Employee"}
+          </button>
         </div>
       )}
 

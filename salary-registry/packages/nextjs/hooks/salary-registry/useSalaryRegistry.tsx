@@ -150,6 +150,27 @@ export function useSalaryRegistry() {
     [hasContract, registry, writeContractAsync, roleResult],
   );
 
+  // --- Self-register as Employee ---
+  const registerAsEmployee = useCallback(async () => {
+    if (!hasContract || !registry?.address) return;
+    setIsProcessing(true);
+    setMessage("Registering as employee...");
+    try {
+      await writeContractAsync({
+        address: registry.address,
+        abi: registry.abi,
+        functionName: "register",
+        args: [],
+      });
+      setMessage("Registered as Employee!");
+      roleResult.refetch();
+    } catch (e) {
+      setMessage(`Registration failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [hasContract, registry, writeContractAsync, roleResult]);
+
   // --- Read role for an arbitrary address (for UI lookups) ---
   const [lookupAddr, setLookupAddr] = useState<string>("");
   const lookupResult = useReadContract({
@@ -178,6 +199,7 @@ export function useSalaryRegistry() {
     setMessage,
     isConnected,
     address,
+    registerAsEmployee,
     lookupAddr,
     setLookupAddr,
     lookupRole,

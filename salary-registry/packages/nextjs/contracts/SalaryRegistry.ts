@@ -10,7 +10,7 @@ import { SalaryRegistry as SalaryRegistry_LOCAL } from "./SalaryRegistry.local";
 
 const REMOTE = {
   11155111: {
-    address: "0xB16e8Df92A54b7f95F6821ffE3D553Cc4C37b811",
+    address: "0xB163Fb6D10f8618A6412eA66359bF4bdCAfbB584",
     abi: [
       {
         type: "constructor",
@@ -94,6 +94,13 @@ const REMOTE = {
       },
       {
         type: "function",
+        name: "register",
+        inputs: [],
+        outputs: [],
+        stateMutability: "nonpayable",
+      },
+      {
+        type: "function",
         name: "roles",
         inputs: [
           {
@@ -151,6 +158,19 @@ const REMOTE = {
         ],
         outputs: [],
         stateMutability: "nonpayable",
+      },
+      {
+        type: "event",
+        name: "Registered",
+        inputs: [
+          {
+            name: "account",
+            type: "address",
+            indexed: true,
+            internalType: "address",
+          },
+        ],
+        anonymous: false,
       },
       {
         type: "event",
@@ -212,7 +232,7 @@ const REMOTE = {
         inputs: [],
       },
     ],
-    deployedOnBlock: 10813577,
+    deployedOnBlock: 10813668,
   },
 } as const;
 
