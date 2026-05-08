@@ -49,6 +49,15 @@ jobs:
         working-directory: salary-registry
         run: pnpm install --ignore-scripts
 
+      - name: Create missing local contract stubs
+        working-directory: salary-registry/packages/nextjs/contracts
+        run: |
+          for f in *.ts; do
+            stub="${f%.ts}.local.ts"
+            name="${f%.ts}"
+            [ ! -f "$stub" ] && echo "export const $name = {} as const;" > "$stub"
+          done
+
       - name: Build static export
         working-directory: salary-registry
         env:
