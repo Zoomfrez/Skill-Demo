@@ -29,4 +29,11 @@ if (isIpfs) {
   };
 }
 
+// GitHub Pages (and any subdirectory deployment) — set via NEXT_PUBLIC_BASE_PATH
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+if (basePath) {
+  nextConfig.basePath = basePath;
+  nextConfig.assetPrefix = basePath;
+}
+
 module.exports = nextConfig;
