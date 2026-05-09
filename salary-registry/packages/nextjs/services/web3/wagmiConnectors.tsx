@@ -45,7 +45,7 @@ export const wagmiConnectors = () => {
     ],
 
     {
-      appName: "helper-2",
+      appName: "Confidential Salary Registry",
       projectId: scaffoldConfig.walletConnectProjectId,
     },
   );
