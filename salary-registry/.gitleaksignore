@@ -1,3 +1,0 @@
-# One-line-per-finding ignores: <commit>:<path>:<rule>:<line>
-# Populate as needed for historical commits that tripped a rule but are
-# known-safe (e.g. anvil devkeys in historical deploy scripts).
