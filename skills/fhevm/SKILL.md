@@ -1,6 +1,7 @@
 ---
 name: fhevm
-description: Build confidential smart contracts and dApps using Zama's FHEVM (Fully Homomorphic Encryption Virtual Machine). Use this skill when writing, testing, or deploying Solidity contracts that operate on encrypted data, or when building frontend applications that encrypt inputs and decrypt outputs. Covers encrypted types, FHE operations, access control, input proofs, decryption flows, relayer SDK integration, Hardhat testing, and common failure modes. Trigger on any task involving: FHEVM, confidential smart contracts, encrypted ERC20, ERC-7984, ConfidentialERC20, FHE.add/FHE.allow, euint types, ZamaEthereumConfig, Hardhat template setup, or private onchain computation.
+description: >
+  Build confidential smart contracts and dApps using Zama's FHEVM (Fully Homomorphic Encryption Virtual Machine). Use this skill when writing, testing, or deploying Solidity contracts that operate on encrypted data, or when building frontend applications that encrypt inputs and decrypt outputs. Covers encrypted types, FHE operations, access control, input proofs, decryption flows, relayer SDK integration, Hardhat testing, and common failure modes. Trigger on any task involving FHEVM, confidential smart contracts, encrypted ERC20, ERC-7984, ConfidentialERC20, FHE.add/FHE.allow, euint types, ZamaEthereumConfig, Hardhat template setup, or private onchain computation.
 ---
 
 # FHEVM Skill — Index
@@ -13,12 +14,52 @@ FHEVM lets Solidity contracts compute on encrypted data without ever decrypting 
 |---|---|
 | `CORE_RULES.md` | Writing or auditing any Solidity contract. Contains MUST/SHOULD/NEVER rules — read first. |
 | `FRONTEND.md` | Building any UI that encrypts inputs or decrypts results. |
+| `DAPP_INTEGRATION.md` | Wiring a complete frontend — wallet connect, role detection, all contract functions exposed. |
 | `DEPLOYMENT.md` | Shipping to Sepolia or mainnet. Pre-deploy and post-deploy checklists. |
 | `ANTI_PATTERNS.md` | Debugging a revert or unexpected behavior. Problem → Why → Fix. |
 | `EXAMPLES.md` | Need a clean, production-grade reference contract or frontend snippet. |
 | `CHANGELOG.md` | Pinning versions or hitting a "version mismatch" error. |
 | `SETUP.md` | Starting a new project from zero. Full environment setup from the Zama Hardhat template. |
 | `ERC7984.md` | Building confidential tokens. ERC-7984 standard, OpenZeppelin ConfidentialERC20, wrapping ERC-20. |
+
+## Agent decision tree
+
+Read this before writing a single line of code.
+
+```
+Given any FHEVM task:
+│
+├── Does it store user-specific private data?
+│     → mapping(address => euintXX)
+│     → ALWAYS FHE.allowThis + FHE.allow after EVERY write
+│
+├── Does it need conditional logic?
+│     → NEVER if/require on ebool
+│     → ALWAYS FHE.select(condition, valueIfTrue, valueIfFalse)
+│
+├── Does it accept encrypted user input?
+│     → params: externalEuintXX + bytes calldata inputProof
+│     → FIRST line in function body: euintXX val = FHE.fromExternal(input, proof)
+│
+├── Does a user need to read their own private value?
+│     → return euintXX handle from view function
+│     → user decrypts off-chain via userDecrypt + EIP-712 (see FRONTEND.md §5.1)
+│
+├── Does a value need to become public on-chain?
+│     → FHE.makePubliclyDecryptable(handle)
+│     → FHE.requestDecryption → async Gateway callback
+│     → result arrives in a SEPARATE transaction (seconds to minutes)
+│
+├── Building a frontend?
+│     → Read DAPP_INTEGRATION.md before writing any JS
+│     → NEVER ethers.Wallet.createRandom() — always window.ethereum
+│     → Detect role after connect — show correct panel
+│     → Expose ALL contract functions in the UI
+│
+└── Token contract?
+      → Use ConfidentialERC20 from OpenZeppelin (see ERC7984.md)
+      → Or implement manually: euint64 balances + FHE.select for safe transfer
+```
 
 ## Quick start
 
