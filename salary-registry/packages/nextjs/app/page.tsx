@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
 import { RainbowKitCustomConnectButton } from "~~/components/helper/RainbowKitCustomConnectButton";
-import { Role, ROLE_LABELS, useSalaryRegistry } from "~~/hooks/salary-registry/useSalaryRegistry";
+import { Role, ROLE_LABELS, TxPhase, useSalaryRegistry } from "~~/hooks/salary-registry/useSalaryRegistry";
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const card = "bg-white border border-gray-200 shadow p-6 mb-4";
@@ -17,6 +17,21 @@ const danger = `${btn} bg-red-600 text-white hover:bg-red-700 focus:ring-red-500
 const inputCls =
   "w-full border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FFD208]";
 const labelCls = "block text-sm font-medium text-gray-700 mb-1";
+
+// ── Tx phase label helper ─────────────────────────────────────────────────────
+function phaseLabel(opKey: string, defaultLabel: string, activeOp: string, txPhase: TxPhase): string {
+  if (activeOp !== opKey) return defaultLabel;
+  switch (txPhase) {
+    case "encrypting":
+      return "Encrypting...";
+    case "awaiting-wallet":
+      return "Confirm in wallet...";
+    case "mining":
+      return "Mining...";
+    default:
+      return defaultLabel;
+  }
+}
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 function Skeleton({ className = "" }: { className?: string }) {
@@ -87,7 +102,11 @@ function EmployeePanel({ registry }: { registry: ReturnType<typeof useSalaryRegi
               disabled={registry.isDecrypting || registry.isAllowing}
               onClick={registry.decryptSalary}
             >
-              {registry.isAllowing ? "Waiting for signature..." : registry.isDecrypting ? "Decrypting..." : "Decrypt My Salary"}
+              {registry.isAllowing
+                ? "Waiting for signature..."
+                : registry.isDecrypting
+                  ? "Decrypting..."
+                  : "Decrypt My Salary"}
             </button>
           )}
         </div>
@@ -100,9 +119,13 @@ function EmployeePanel({ registry }: { registry: ReturnType<typeof useSalaryRegi
 function ManagerPanel({ registry }: { registry: ReturnType<typeof useSalaryRegistry> }) {
   const [employee, setEmployee] = useState("");
   const [amount, setAmount] = useState("");
+  const [newManager, setNewManager] = useState("");
+
+  const { activeOp, txPhase, isProcessing, myRole } = registry;
 
   return (
     <div className={card}>
+      {/* Set Salary */}
       <h3 className={title}>Set Employee Salary</h3>
       <div className="space-y-3 mb-6">
         <div>
@@ -122,19 +145,27 @@ function ManagerPanel({ registry }: { registry: ReturnType<typeof useSalaryRegis
         </div>
         <button
           className={primary}
-          disabled={registry.isProcessing || !employee || !amount}
-          onClick={() => { registry.setSalary(employee, parseInt(amount, 10)); setEmployee(""); setAmount(""); }}
+          disabled={isProcessing || !employee || !amount}
+          onClick={() => {
+            registry.setSalary(employee, parseInt(amount, 10));
+            setEmployee("");
+            setAmount("");
+          }}
         >
-          {registry.isProcessing ? "Processing..." : "Encrypt & Set Salary"}
+          {phaseLabel("setSalary", "Encrypt & Set Salary", activeOp, txPhase)}
         </button>
       </div>
 
+      {/* Employee list */}
       {registry.employees.length > 0 && (
-        <div>
+        <div className="border-t border-gray-100 pt-4 mb-6">
           <p className="text-sm font-semibold text-gray-700 mb-2">Employees with salaries set</p>
           <div className="space-y-1">
             {registry.employees.map(e => (
-              <div key={e.address} className="flex items-center justify-between bg-gray-50 border border-gray-100 px-3 py-2 text-xs">
+              <div
+                key={e.address}
+                className="flex items-center justify-between bg-gray-50 border border-gray-100 px-3 py-2 text-xs"
+              >
                 <span className="font-mono text-gray-700">{e.address}</span>
                 <a
                   href={`https://sepolia.etherscan.io/block/${e.blockNumber}`}
@@ -149,6 +180,34 @@ function ManagerPanel({ registry }: { registry: ReturnType<typeof useSalaryRegis
           </div>
         </div>
       )}
+
+      {/* Add Manager — visible to Admin only */}
+      {myRole >= Role.Admin && (
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-sm font-semibold text-gray-700 mb-3">Add Manager</p>
+          <div className="space-y-3">
+            <div>
+              <label className={labelCls}>Address to promote</label>
+              <input
+                className={inputCls}
+                placeholder="0x..."
+                value={newManager}
+                onChange={e => setNewManager(e.target.value)}
+              />
+            </div>
+            <button
+              className={secondary}
+              disabled={isProcessing || !newManager}
+              onClick={() => {
+                registry.addManager(newManager);
+                setNewManager("");
+              }}
+            >
+              {phaseLabel("setRole", "Grant Manager Role", activeOp, txPhase)}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -159,13 +218,18 @@ function AdminPanel({ registry }: { registry: ReturnType<typeof useSalaryRegistr
   const [role, setRole] = useState<Role>(Role.Employee);
   const [gmManager, setGmManager] = useState("");
   const [gmEmployee, setGmEmployee] = useState("");
+  const [obsObserver, setObsObserver] = useState("");
+  const [obsEmployee, setObsEmployee] = useState("");
+
+  const { activeOp, txPhase, isProcessing } = registry;
 
   return (
     <div className={card}>
-      <h3 className={title}>Manage Roles</h3>
+      <h3 className={title}>Owner Controls</h3>
 
       {/* Set / revoke role */}
-      <div className="space-y-3 mb-4">
+      <div className="space-y-3 mb-6">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Role Management</p>
         <div>
           <label className={labelCls}>Address</label>
           <input className={inputCls} placeholder="0x..." value={target} onChange={e => setTarget(e.target.value)} />
@@ -180,10 +244,18 @@ function AdminPanel({ registry }: { registry: ReturnType<typeof useSalaryRegistr
           </select>
         </div>
         <div className="flex gap-2">
-          <button className={secondary} disabled={registry.isProcessing || !target} onClick={() => registry.setRole(target, role)}>
-            {registry.isProcessing ? "Processing..." : "Set Role"}
+          <button
+            className={secondary}
+            disabled={isProcessing || !target}
+            onClick={() => registry.setRole(target, role)}
+          >
+            {phaseLabel("setRole", "Set Role", activeOp, txPhase)}
           </button>
-          <button className={danger} disabled={registry.isProcessing || !target} onClick={() => registry.revokeRole(target)}>
+          <button
+            className={danger}
+            disabled={isProcessing || !target}
+            onClick={() => registry.revokeRole(target)}
+          >
             Revoke
           </button>
         </div>
@@ -191,7 +263,7 @@ function AdminPanel({ registry }: { registry: ReturnType<typeof useSalaryRegistr
 
       {/* Role lookup */}
       <div className="border-t border-gray-100 pt-4 mb-6">
-        <label className={labelCls}>Look up role</label>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Look up role</p>
         <div className="flex gap-2 items-center">
           <input
             className={`${inputCls} flex-1`}
@@ -203,24 +275,95 @@ function AdminPanel({ registry }: { registry: ReturnType<typeof useSalaryRegistr
         </div>
       </div>
 
-      {/* Grant manager access to specific salary */}
-      <div className="border-t border-gray-100 pt-4">
-        <p className="text-sm font-semibold text-gray-700 mb-3">Grant Manager Access to Salary</p>
+      {/* Check has salary */}
+      <div className="border-t border-gray-100 pt-4 mb-6">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Check salary exists</p>
+        <div className="flex gap-2 items-center">
+          <input
+            className={`${inputCls} flex-1`}
+            placeholder="0x..."
+            value={registry.checkAddr}
+            onChange={e => registry.setCheckAddr(e.target.value)}
+          />
+          {registry.checkAddr && registry.checkHasSalary !== undefined && (
+            <span
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${registry.checkHasSalary ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}
+            >
+              {registry.checkHasSalary ? "Has salary" : "No salary"}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Grant manager access */}
+      <div className="border-t border-gray-100 pt-4 mb-6">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Grant Manager Salary Access</p>
         <div className="space-y-3">
           <div>
             <label className={labelCls}>Manager Address</label>
-            <input className={inputCls} placeholder="0x..." value={gmManager} onChange={e => setGmManager(e.target.value)} />
+            <input
+              className={inputCls}
+              placeholder="0x..."
+              value={gmManager}
+              onChange={e => setGmManager(e.target.value)}
+            />
           </div>
           <div>
             <label className={labelCls}>Employee Address</label>
-            <input className={inputCls} placeholder="0x..." value={gmEmployee} onChange={e => setGmEmployee(e.target.value)} />
+            <input
+              className={inputCls}
+              placeholder="0x..."
+              value={gmEmployee}
+              onChange={e => setGmEmployee(e.target.value)}
+            />
           </div>
           <button
             className={secondary}
-            disabled={registry.isProcessing || !gmManager || !gmEmployee}
-            onClick={() => { registry.grantManagerAccess(gmManager, gmEmployee); setGmManager(""); setGmEmployee(""); }}
+            disabled={isProcessing || !gmManager || !gmEmployee}
+            onClick={() => {
+              registry.grantManagerAccess(gmManager, gmEmployee);
+              setGmManager("");
+              setGmEmployee("");
+            }}
           >
-            {registry.isProcessing ? "Processing..." : "Grant Access"}
+            {phaseLabel("grantManagerAccess", "Grant Manager Access", activeOp, txPhase)}
+          </button>
+        </div>
+      </div>
+
+      {/* Grant observer access */}
+      <div className="border-t border-gray-100 pt-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Grant Observer Access</p>
+        <p className="text-xs text-gray-400 mb-3">Allow any third-party address to decrypt an employee&apos;s salary.</p>
+        <div className="space-y-3">
+          <div>
+            <label className={labelCls}>Observer Address (any third party)</label>
+            <input
+              className={inputCls}
+              placeholder="0x..."
+              value={obsObserver}
+              onChange={e => setObsObserver(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Employee Address</label>
+            <input
+              className={inputCls}
+              placeholder="0x..."
+              value={obsEmployee}
+              onChange={e => setObsEmployee(e.target.value)}
+            />
+          </div>
+          <button
+            className={primary}
+            disabled={isProcessing || !obsObserver || !obsEmployee}
+            onClick={() => {
+              registry.grantObserverAccess(obsObserver, obsEmployee);
+              setObsObserver("");
+              setObsEmployee("");
+            }}
+          >
+            {phaseLabel("grantObserverAccess", "Grant Observer Access", activeOp, txPhase)}
           </button>
         </div>
       </div>
@@ -282,8 +425,12 @@ export default function Home() {
           <p className="text-sm text-gray-500 mb-4">
             Register as an Employee to receive a confidential salary. Only you will be able to decrypt it.
           </p>
-          <button className={primary} disabled={registry.isProcessing} onClick={registry.registerAsEmployee}>
-            {registry.isProcessing ? "Registering..." : "Register as Employee"}
+          <button
+            className={primary}
+            disabled={registry.isProcessing}
+            onClick={registry.registerAsEmployee}
+          >
+            {phaseLabel("register", "Register as Employee", registry.activeOp, registry.txPhase)}
           </button>
         </div>
       )}

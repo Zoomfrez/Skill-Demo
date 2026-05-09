@@ -20,6 +20,7 @@ contract SalaryRegistry is ZamaEthereumConfig {
     event RoleGranted(address indexed account, Role role);
     event SalarySet(address indexed employee, bytes32 handle);
     event Registered(address indexed account);
+    event ObserverAccessGranted(address indexed employee, address indexed observer);
 
     modifier onlyRole(Role r) {
         require(uint8(roles[msg.sender]) >= uint8(r), "SalaryRegistry: insufficient role");
@@ -69,6 +70,14 @@ contract SalaryRegistry is ZamaEthereumConfig {
         require(FHE.isInitialized(_salaries[employee]), "SalaryRegistry: salary not set");
         require(roles[manager] >= Role.Manager, "SalaryRegistry: not a manager");
         FHE.allow(_salaries[employee], manager);
+    }
+
+    /// @notice Grant any third-party address decryption access to an employee's salary.
+    /// @dev Observer need not hold any role — suitable for auditors, accountants, or HR systems.
+    function grantObserverAccess(address observer, address employee) external onlyRole(Role.Admin) {
+        require(FHE.isInitialized(_salaries[employee]), "SalaryRegistry: salary not set");
+        FHE.allow(_salaries[employee], observer);
+        emit ObserverAccessGranted(employee, observer);
     }
 
     /// @notice Returns the encrypted salary handle for an employee.
